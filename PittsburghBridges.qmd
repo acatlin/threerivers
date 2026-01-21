@@ -1,0 +1,48 @@
+---
+title: "PittsburghBridges"
+format: html
+---
+
+Approach:
+
+I'll start by creating a beachhead, where I pull down the CSV file from a folder in a public
+repo that I created, and dump the contents out using the gt() command.
+
+I'll include an explanation for why I chose this dataset--I grew up in a Pittsburgh river town, where you couldn't get out of town by crossing a bridge.
+
+For code, I'll use Garret Grolemund's book to create a basic program that fulfills the requirement deliverables.
+I'll then go through a series of interactions with Claude and/or ChatGPT to:
+(1) COnvert the code to tidyverse
+(2) EDA.  Look at different choices for river.  Use my domain knowledge to make a decision about the included Yough river.
+(3) Feature engineering.  Bin time up into before 1900 and 1900 and after.
+(2) Ask and answer a question about Wooden Bridges vs. Metal Bridges over time.
+(3) If time allows, I'll attempt to augment the data by getting latitudes and longitudes for each bridge and showing on a google map.
+(4) It would be very nice to show a visual where the bridges are dynamically overlaid over time.
+
+```{r}
+# install.packages("gt")
+library(tidyverse)
+library(gt)
+
+```
+
+Beachhead - verify that I can read data into a tibble (dataframe), and dump out contents
+Note: I'm using the raw version of https://raw.githubusercontent.com/acatlin/data/refs/heads/master/bridges_yearbuilt.csv
+
+
+```{r}
+url <- "https://raw.githubusercontent.com/acatlin/data/refs/heads/master/bridges_yearbuilt.csv"
+
+df <- read_csv(
+  file = url,
+  show_col_types = FALSE,
+  progress = FALSE
+)
+
+glimpse(df)
+
+df |>
+  gt()
+
+```
+
