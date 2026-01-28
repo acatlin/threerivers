@@ -3,12 +3,35 @@ title: "PittsburghBridges"
 format: html
 ---
 
-Approach:
+## Approach:
 
 I'll start by creating a beachhead, where I pull down the CSV file from a folder in a public
 repo that I created, and dump the contents out using the gt() command.
 
-I'll include an explanation for why I chose this dataset--I grew up in a Pittsburgh river town, where you couldn't get out of town by crossing a bridge.
+[TO DO:] Include data source, map of Pittsburgh showing three rivers (and Yough)
+
+Source: https://archive.ics.uci.edu/dataset/18/pittsburgh+bridges
+See also:
+The same UCI dataset is also available on Kaggle Kaggle at:
+
+https://www.kaggle.com/datasets/heitornunes/pittsburgh-bridges-data-set
+
+3. Western Pennsylvania Regional Data Center (WPRDC)
+The WPRDC also hosts City of Pittsburgh bridges data Wprdc at:
+
+https://data.wprdc.org/dataset/city-of-pittsburgh-bridges
+
+https://www.fhwa.dot.gov/bridge/nbi/ascii.cfm
+```{r}
+
+```
+
+
+If you want a real-world, current, defensible dataset: use NBI, filtered to Pittsburgh/Allegheny County, using Item 27 (Year Built) + Item 43A (Material).
+
+Source - Claude, ChatGPT
+
+I'll include an explanation for why I chose this dataset--I grew up in a Pittsburgh river town, where you couldn't get out of town without crossing a bridge.
 
 For code, I'll use Garret Grolemund's book to create a basic program that fulfills the requirement deliverables.
 I'll then go through a series of interactions with Claude and/or ChatGPT to:
@@ -45,4 +68,239 @@ df |>
   gt()
 
 ```
+## Subset data
+
+I'll create a subset of the data, looking at the identif, river, erected, and material.  I need to remember that R is a 1-based (vs 0-based) language, and case-senstive.
+
+```{r}
+df1 <- df[1:5,c(1,2,4,10)]
+
+df1 |>
+  gt()
+```
+
+## Subset Data and filter out missing data
+By inspection, I can see that there is some missing data in the river and material columns.  I'll just delete those rows for now.  Also, I'll use the column names instead of the numbers to make it more readable.
+
+```{r}
+df2 <- df[df$material != "?", c("identif", "river", "erected", "material")]
+
+df2 |>
+  gt()
+```
+
+## Tidyverse version
+I asked Claude to convert to tidyverse syntax--transcript provided separately.
+
+```{r}
+## Subset Data and filter out missing data (tidyverse version)
+# Using dplyr's filter() and select() functions with pipe operator
+
+df2 <- df |>
+  filter(material != "?") |>
+  select(identif, river, erected, material)
+
+df2 |>
+  gt()
+```
+
+## EDA: River Column Analysis
+
+If I have less experience with ggplot, I might not ask for the percentages to be included in the bar plot.
+
+```{r}
+
+# Table of values with counts and percentages
+river_summary <- df2 |>
+  count(river) |>
+  mutate(
+    percentage = n / sum(n) * 100,
+    percentage_label = paste0(round(percentage, 1), "%")
+  )
+
+river_summary |>
+  gt() |>
+  cols_label(
+    river = "River",
+    n = "Count",
+    percentage = "Percentage",
+    percentage_label = "Pct Label"
+  ) |>
+  fmt_number(columns = percentage, decimals = 1)
+
+# Bar graph with percentage labels at top of each bar
+ggplot(river_summary, aes(x = river, y = n, fill = river)) +
+  geom_col() +
+  geom_text(
+    aes(label = percentage_label),
+    vjust = -0.5,
+    size = 4
+  ) +
+  labs(
+    title = "Distribution of Pittsburgh Bridges by River",
+    x = "River",
+    y = "Count"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+```
+
+## Feature Engineering: Create "era" column
+
+```{r}
+df3 <- df2 |>
+  mutate(
+    era = if_else(erected < 1900, "old", "new")
+  )
+
+# Preview the new column
+df3 |>
+  select(identif, erected, era, material) |>
+  head(10) |>
+  gt()
+
+# Cross-tabulation: era (rows) x material (columns)
+era_material_table <- df3 |>
+  count(era, material) |>
+  pivot_wider(
+    names_from = material,
+    values_from = n,
+    values_fill = 0
+  )
+
+era_material_table |>
+  gt() |>
+  tab_header(
+    title = "Bridge Material by Era",
+    subtitle = "old = before 1900, new = 1900 and after"
+  ) |>
+  cols_label(era = "Era")
+```
+
+## Handling unexpected data
+
+Is the river "Y" a data entry error?  Should we delete it or correct it.  In this case, because I grew up in a Pittsburgh river town, I know that "Y" stands for the "Youghiogheny river, which is a tributary for the Monongahela river (which is a tributary for the Ohio, which is a tributary for the Mississippi...)  I'll make the decision to convert "Y" values to "M" values, then recheck my table of rivers.
+
+I ran this after the feature engineering.  I'm leaving it here, so it corresponds to the Claude transcript.  In the final version, I would move it back under the EDA.
+
+```{r}
+## Convert river value "Y" to "M"
+
+df3 <- df3 |>
+  mutate(
+    river = if_else(river == "Y", "M", river)
+  )
+
+# Verify the change with updated river summary table
+river_summary <- df3 |>
+  count(river) |>
+  mutate(
+    percentage = n / sum(n) * 100
+  )
+
+river_summary |>
+  gt() |>
+  cols_label(
+    river = "River",
+    n = "Count",
+    percentage = "Percentage"
+  ) |>
+  fmt_percent(columns = percentage, scale_values = FALSE, decimals = 1)
+```
+
+## Map of Pittsburgh and the three rivers (with the "Yough")
+TO DO: Move library(leaflet) up with other packages
+
+```{r}
+# install.packages("leaflet")
+library(leaflet)
+
+# Key geographic coordinates
+pittsburgh_point <- c(-79.9959, 40.4406)  # Downtown Pittsburgh (The Point)
+yough_confluence <- c(-79.8517, 40.3475)  # McKeesport - where Yough meets Mon
+
+# Create the map
+leaflet() |>
+  setView(lng = -79.92, lat = 40.40, zoom = 11) |>
+  addTiles() |>
+  
+  # Mark Pittsburgh (The Point - confluence of three rivers)
+  addMarkers(
+    lng = pittsburgh_point[1], 
+    lat = pittsburgh_point[2],
+    popup = "Pittsburgh - The Point<br>Confluence of Three Rivers"
+  ) |>
+  
+  # Mark Youghiogheny confluence with Monongahela
+  addMarkers(
+    lng = yough_confluence[1], 
+    lat = yough_confluence[2],
+    popup = "McKeesport<br>Youghiogheny enters Monongahela"
+  ) |>
+  
+  # Label the rivers
+  addLabelOnlyMarkers(
+    lng = c(-80.05, -79.93, -79.98, -79.82),
+    lat = c(40.45, 40.38, 40.48, 40.33),
+    label = c("Ohio River", "Monongahela River", "Allegheny River", "Youghiogheny River"),
+    labelOptions = labelOptions(
+      noHide = TRUE,
+      direction = "center",
+      textOnly = TRUE,
+      style = list(
+        "color" = "darkblue",
+        "font-weight" = "bold",
+        "font-size" = "12px"
+      )
+    )
+  ) |>
+  
+  # Add a title
+  addControl(
+    html = "<h4 style='margin:0; padding:5px; background:white; border-radius:5px;'>Pittsburgh's Three Rivers</h4>",
+    position = "topright"
+  )
+```
+
+## Group by decade and material, then visualize the shift
+
+```{r}
+df3 |>
+  mutate(decade = floor(erected / 10) * 10) |>
+  count(decade, material) |>
+  ggplot(aes(x = decade, y = n, fill = material)) +
+  geom_col(position = "stack") +
+  labs(
+    title = "Bridge Construction Materials by Decade",
+    x = "Decade",
+    y = "Number of Bridges"
+  ) +
+  theme_minimal()
+```
+
+## Cross-tabulation of river by material and era
+
+Investigate whether different rivers have different bridge profiles. For example, are bridges on the Ohio River newer or built with different materials than those on the Monongahela? This could reveal historical development patterns across different parts of Pittsburgh.
+
+```{r}
+df3 |>
+  count(river, era, material) |>
+  ggplot(aes(x = river, y = n, fill = material)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~era) +
+  labs(title = "Bridge Materials by River and Era") +
+  theme_minimal()
+```
+
+## Findings and Recommendations
+
+Pittsburgh river bridges have shifted from mostly wood in the 19th century to Steel more recently.
+
+An interesting next step would be to update the bridges from one of the two identified sources, then add latitude and longitude information for each bridge.  Then plot them on the leaflet map with color-coded markers by material or era. This would create a compelling visual showing the spatial distribution of bridge types across the Pittsburgh region and could reveal geographic clustering patterns.
+
+### LLMS used:
+
+•	Anthropic. (2025). Claude Opus 4.5 [Large language model]. https://claude.ai. Accessed January 28, 2026.
+•	OpenAI. (2025). ChatGPT (Version 5.2) [Large language model]. https://chat.openai.com. Accessed January 8, 2026.
 
